@@ -1,0 +1,21 @@
+# OpenEvolve configuration — using Groq (OpenAI-compatible)
+# Keys are loaded from .env; OPENAI_API_KEY is set to GROQ_API_KEY at runtime.
+
+max_iterations: 100
+
+# Use full rewrites instead of diffs — small models struggle with diff format
+diff_based_evolution: false
+
+llm:
+  api_base: "https://api.groq.com/openai/v1"
+  primary_model: "llama-3.1-8b-instant"
+  temperature: 0.7
+
+database:
+  population_size: 50
+  num_islands: 3
+  exploitation_ratio: 0.7
+
+evaluator:
+  timeout: 30
+  num_workers: 1   # keep low to avoid Groq 429 rate limits
