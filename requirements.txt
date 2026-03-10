@@ -1,2 +1,7 @@
+# Core
 openevolve==0.2.26
 matplotlib
+
+# LLM inference server (GPU node only — requires CUDA)
+# Install with: module load cuda/12.2 && pip install vllm
+vllm

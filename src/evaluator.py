@@ -55,14 +55,14 @@ def evaluate(program_path: str) -> dict:
         spec.loader.exec_module(mod)
         Controller = mod.Controller
     except Exception:
-        return {"compile_ok": 0.0, "score": 0.0, "ise": 1e9,
-                "overshoot": 1.0, "ss_error": 1.0}
+        return {"compile_ok": 0.0, "score": 0.0, "combined_score": 0.0,
+                "ise": 1e9, "overshoot": 1.0, "ss_error": 1.0}
 
     try:
         results = [_simulate(Controller, sp) for sp in SETPOINTS]
     except Exception:
-        return {"compile_ok": 1.0, "score": 0.0, "ise": 1e9,
-                "overshoot": 1.0, "ss_error": 1.0}
+        return {"compile_ok": 1.0, "score": 0.0, "combined_score": 0.0,
+                "ise": 1e9, "overshoot": 1.0, "ss_error": 1.0}
 
     avg_ise       = sum(r["ise"]       for r in results) / len(results)
     avg_overshoot = sum(r["overshoot"] for r in results) / len(results)
@@ -74,9 +74,10 @@ def evaluate(program_path: str) -> dict:
     score     = 0.5 * score_ise + 0.3 * score_os + 0.2 * score_ss
 
     return {
-        "compile_ok": 1.0,
-        "score":      round(score, 6),
-        "ise":        round(avg_ise, 6),
-        "overshoot":  round(avg_overshoot, 6),
-        "ss_error":   round(avg_ss_error, 6),
+        "compile_ok":     1.0,
+        "score":          round(score, 6),
+        "combined_score": round(score, 6),
+        "ise":            round(avg_ise, 6),
+        "overshoot":      round(avg_overshoot, 6),
+        "ss_error":       round(avg_ss_error, 6),
     }

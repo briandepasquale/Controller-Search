@@ -1,15 +1,24 @@
-# OpenEvolve configuration — using Groq (OpenAI-compatible)
-# Keys are loaded from .env; OPENAI_API_KEY is set to GROQ_API_KEY at runtime.
+# OpenEvolve configuration
+# Keys are loaded from .env; OPENAI_API_KEY is set at runtime (see notebook).
+#
+# ── Switch backends by uncommenting one llm block ────────────────────────────
 
 max_iterations: 100
 
-# Use full rewrites instead of diffs — small models struggle with diff format
+# Use full rewrites — small models struggle with diff format
 diff_based_evolution: false
 
+# ── Local vLLM (recommended — no rate limits) ─────────────────────────────────
 llm:
-  api_base: "https://api.groq.com/openai/v1"
-  primary_model: "llama-3.1-8b-instant"
+  api_base: "http://localhost:8000/v1"
+  primary_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
   temperature: 0.7
+
+# ── Groq (free tier hits 500k token/day limit quickly) ────────────────────────
+# llm:
+#   api_base: "https://api.groq.com/openai/v1"
+#   primary_model: "llama-3.1-8b-instant"
+#   temperature: 0.7
 
 database:
   population_size: 50
@@ -18,4 +27,4 @@ database:
 
 evaluator:
   timeout: 30
-  num_workers: 1   # keep low to avoid Groq 429 rate limits
+  num_workers: 4   # can increase with local model — no rate limits

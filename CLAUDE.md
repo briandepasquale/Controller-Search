@@ -5,27 +5,63 @@ This project explores **evolutionary search for feedback controllers** using LLM
 The baseline is a hand-tuned PID controller; the goal is to evolve program-level controller code that performs as well or better.
 
 ## Repository Structure
-- [feedback_controller.py](feedback_controller.py) — PID controller + first-order plant simulator. Entry point: `simulate()`.
-- [plot_pid.py](plot_pid.py) — Generates `pid_diagram.png`, a block diagram of the PID feedback loop using matplotlib.
-- [pid_diagram.png](pid_diagram.png) — Rendered block diagram (Setpoint → Summing junction → PID → Plant → Output, with sensor feedback path).
-- [evolve_controller.ipynb](evolve_controller.ipynb) — Notebook scaffolding for OpenEvolve integration (in progress; currently has intro markdown only).
+- [src/controller.py](src/controller.py) — PIDController class + simulate()
+- [src/initial_program.py](src/initial_program.py) — Baseline controller with EVOLVE-BLOCK markers (this is what OpenEvolve mutates)
+- [src/evaluator.py](src/evaluator.py) — `evaluate(program_path)` → metrics dict; scores candidates across three setpoints
+- [src/plot_pid.py](src/plot_pid.py) — Draws the PID block diagram
+- [config.yaml](config.yaml) — OpenEvolve config (model, iterations, population)
+- [evolve_controller.ipynb](evolve_controller.ipynb) — Main notebook: start vLLM, score baseline, run evolution, plot results
+- [pid_diagram.png](pid_diagram.png) — Block diagram of the PID feedback loop
 
 ## PID Baseline
 - Plant: first-order system `dy/dt = -a*y + b*u`, with `a=2.0`, `b=3.0`
 - Gains: `Kp=3.0`, `Ki=2.0`, `Kd=0.1`, `dt=0.01`
-- Actuator saturation: `[-10, 10]`
-- Default setpoint: `1.0`, duration: `10.0 s`
-- Achieves near-zero steady-state error
+- Actuator saturation: `[-10, 10]` (applied externally by evaluator)
+- Evaluated across three setpoints: `[0.5, 1.0, 2.0]`, duration `10.0s`
+- Baseline scores: `score=0.9421, ISE=0.1262, overshoot=0.0, ss_error=0.0005`
 
-## Planned Work
-- Use [OpenEvolve](https://github.com/algorithmicsuperintelligence/openevolve) (open-source AlphaEvolve) to mutate controller code inside `# EVOLVE-BLOCK-START / END` markers
-- Evaluator scores candidates on how well they drive the simulated plant to a setpoint
-- Notebook `evolve_controller.ipynb` is the intended integration point
+## Scoring
+```
+score = 0.5 * (1/(1+ISE)) + 0.3 * (1/(1+5·overshoot)) + 0.2 * (1/(1+20·ss_error))
+combined_score = score  # used by OpenEvolve for MAP-Elites selection
+```
+Higher is better. Baseline has zero overshoot and near-zero ss_error, so headroom is almost entirely in ISE.
+
+## How Evolved Code Can Beat the Baseline
+- Gains are hand-tuned, not optimal
+- PID outputs only `u=3.0` on the first step; saturating the actuator early (`u=10`) reduces ISE
+- No feedforward: steady-state effort is `u_ss = (a/b)*setpoint = 2/3 * setpoint`; adding it reduces transient ISE
+- EVOLVE-BLOCK covers the full class — any controller structure is valid as long as it implements `Controller(dt)` / `compute(setpoint, measurement) → float`
 
 ## Environment
-- Cluster: Boston University SCC (`/projectnb/depaqlab/`)
-- Python 3 available via `python3`
-- Git repo initialized; single commit so far (`0abc222`)
+- Cluster: Boston University SCC
+- Repo path: `/projectnb/rnn-models/bddepasq/Controller-Search/`
+- Python 3.12 via `.venv` (broken pip shebang; use `/share/pkg.8/python3/3.12.4/install/bin/python3 -m pip` directly)
+- Jupyter kernel registered: `controller-search` ("Controller-Search (.venv)")
+- GPU: single NVIDIA L40S (46GB); other GPUs on node may be occupied by other users
 
-## Session History
-- **Session 1 (initial):** Created baseline PID simulation (`feedback_controller.py`), block diagram generator (`plot_pid.py`), and notebook scaffold (`evolve_controller.ipynb`). Committed as "Initial commit: PID feedback controller simulation and block diagram".
+## LLM Backend
+- Currently: `Qwen/Qwen2.5-Coder-14B-Instruct` via local vLLM on GPU 0
+- vLLM must be started with `--max-model-len 16384` (prompts are ~4000-4400 tokens; default 8192 leaves no room for output)
+- DeepSeek-R1-Distill models work but are very slow (~2 min/call) due to chain-of-thought; prefer Qwen2.5-Coder for faster iteration
+- vLLM start cell in notebook kills any existing server and restarts cleanly
+
+## Results (Session 2 — 100 iterations, Qwen2.5-Coder-14B-Instruct)
+
+Best program found at iteration 98 (generation 9), saved to `openevolve_output/best/best_program.py`.
+
+| Metric | Baseline | Evolved | Change |
+|---|---|---|---|
+| score | 0.9421 | 0.9666 | +2.6% |
+| ISE | 0.1262 | 0.0709 | −44% |
+| overshoot | 0.0 | 0.0 | — |
+| ss_error | 0.0005 | 0.000079 | −84% |
+
+Still a PID structure, but with: higher gains (Kp=3.8, Ki=2.8, Kd=0.12), integral anti-windup clamp (±96), adaptive Kp (nudges up when |derivative|>0.12), and an integral perturbation (+= 0.0013*error). The clamp is the key — it unlocks the higher gains without causing overshoot.
+
+Diagram: `evolved_diagram.png` (generated by `src/plot_evolved.py`)
+
+## Key Issues Resolved
+- `.venv` pip scripts have broken shebang (hardcoded old path `/projectnb/depaqlab/`); use system Python directly
+- `combined_score` must be returned by evaluator or OpenEvolve uses metric average, causing broken programs to be selected as "best"
+- `--max-model-len` must be ≥ 16384 or requests fail with 400 once prompt history grows past ~4000 tokens
