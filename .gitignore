@@ -3,4 +3,4 @@ __pycache__/
 *.pyc
 .env
 openevolve_output/
-evolved_comparison.png
+vllm.log
